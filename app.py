@@ -26,31 +26,32 @@ face_cascade = cv2.CascadeClassifier(
 )
 def get_faces(gray):
     try:
-        # Make image brighter and more clear
-        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
-        gray = clahe.apply(gray)
-        gray = cv2.equalizeHist(gray)
+        # Make your photo 2x bigger so it can see face
+        gray_big = cv2.resize(gray, None, fx=2.0, fy=2.0)
+        gray_big = cv2.equalizeHist(gray_big)
         
-        # Try super sensitive detection
-        faces = face_cascade.detectMultiScale(
-            gray, 
+        faces_big = face_cascade.detectMultiScale(
+            gray_big,
             scaleFactor=1.05,
             minNeighbors=3,
-            minSize=(20, 20),
-            flags=cv2.CASCADE_SCALE_IMAGE
+            minSize=(30, 30)
         )
-        # If still not found, try even more sensitive
+        # Convert back to original size
+        faces = []
+        for (x, y, w, h) in faces_big:
+            faces.append((x//2, y//2, w//2, h//2))
+        
+        # If still not found, try original
         if len(faces) == 0:
+            gray2 = cv2.equalizeHist(gray)
             faces = face_cascade.detectMultiScale(
-                gray,
-                scaleFactor=1.03,
-                minNeighbors=2,
-                minSize=(15, 15)
+                gray2, 1.05, 3, minSize=(20, 20)
             )
+            faces = list(faces)
         return faces
-    except:
+    except Exception as e:
+        st.write(f"Detector error: {e}")
         return []
-
 
 def train_model():
     faces = []
