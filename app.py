@@ -41,23 +41,23 @@ with tab1:
         
         img_file = st.camera_input("Take Photo")
         
+       img_file = st.camera_input("Take Photo")
+        
         if img_file is not None:
             bytes_data = img_file.getvalue()
             cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
             
-            # Fix for empty() error
-            face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-            gray = cv2.cvtColor(cv2_img, cv2.COLOR_BGR2GRAY)
-            faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+            # No more face detection - just save directly!
+            st.image(cv2_img, channels="BGR", caption="Your photo")
+            st.success("Photo taken!")
             
-            if len(faces) == 0:
-                st.error("No face found 😭 Come closer!")
-            else:
-                st.success(f"Face found! {len(faces)} face(s)")
-                if st.button("Register Face"):
-                    folder = os.path.join(FACE_DATA, f"{name}_{roll}")
-                    os.makedirs(folder, exist_ok=True)
-                    path = os.path.join(folder, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+            if st.button("Register Face"):
+                folder = os.path.join(FACE_DATA, f"{name}_{roll}")
+                os.makedirs(folder, exist_ok=True)
+                path = os.path.join(folder, f"{datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg")
+                cv2.imwrite(path, cv2_img)
+                st.success(f"Registered {name}! Added to database")
+                st.balloons()
                     cv2.imwrite(path, cv2_img)
                     st.success(f"Registered {name}!")
         
