@@ -36,13 +36,17 @@ def detect_faces(img):
             gray = img
         if gray is None or gray.size == 0:
             return [], None
+        # Make face brighter for detection
+        gray = cv2.equalizeHist(gray)
         faces = face_cascade.detectMultiScale(
-            gray, 1.1, 5, minSize=(60, 60)
+            gray, 
+            scaleFactor=1.05, 
+            minNeighbors=3, 
+            minSize=(30, 30)
         )
         return faces, gray
     except:
         return [], None
-
 def train_model():
     faces = []
     ids = []
