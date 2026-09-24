@@ -5,6 +5,7 @@ import os
 import json
 from datetime import datetime
 import pandas as pd
+from PIL import Image
 
 st.set_page_config(page_title="Face Attendance System", layout="centered")
 st.title("📸 Smart Face Attendance System")
@@ -23,19 +24,24 @@ else:
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def detect_faces(img):
-    if img is None:
+    try:
+        if img is None:
+            return [], None
+        # Convert PIL RGB to OpenCV BGR -> GRAY (100% safe)
+        if len(img.shape) == 3:
+            gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = img
+        if gray is None or gray.size == 0:
+            return [], None
+        # Ensure gray is uint8
+        if gray.dtype!= np.uint8:
+            gray = gray.astype(np.uint8)
+        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+        return faces, gray
+    except Exception as e:
+        st.write(f"Debug: {e}")
         return [], None
-    # Fix RGBA and RGB
-    if len(img.shape) == 3:
-        if img.shape[2] == 4:
-            img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
-        elif img.shape[2] == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if len(img.shape)==3 else img
-    if gray is None or gray.size == 0:
-        return [], None
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
-    return faces, gray
 
 def train_model():
     faces=[]; ids=[]
@@ -67,12 +73,13 @@ with tab1:
         elif reg_image is None:
             st.error("Please take a photo first!")
         else:
-            # FIXED: Use getvalue() not read()
-            file_bytes = np.frombuffer(reg_image.getvalue(), dtype=np.uint8)
-            img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            # BEST METHOD: PIL -> numpy (never fails)
+            pil_img = Image.open(reg_image)
+            img = np.array(pil_img)
             faces, gray = detect_faces(img)
             if len(faces)==0:
-                st.error("No face found! Come closer, good light!")
+                st.error("No face found! Come closer, good light, look straight!")
+                st.image(img, caption="This is what camera saw")
             elif len(faces)>1:
                 st.error(f"Found {len(faces)} faces! Register alone!")
             else:
@@ -95,8 +102,8 @@ with tab2:
     else:
         att_image=st.camera_input("Take photo for Attendance", key="att")
         if att_image:
-            file_bytes = np.frombuffer(att_image.getvalue(), dtype=np.uint8)
-            img = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
+            pil_img = Image.open(att_image)
+            img = np.array(pil_img)
             faces, gray = detect_faces(img)
             if len(faces)==0:
                 st.error("No face detected!")
@@ -115,20 +122,4 @@ with tab2:
                             df_old=pd.read_csv(ATTENDANCE_FILE)
                             if not ((df_old['Name']==person) & (df_old['Date']==now.strftime("%Y-%m-%d"))).any():
                                 pd.concat([df_old, pd.DataFrame(data)]).to_csv(ATTENDANCE_FILE,index=False)
-                                st.success(f"✅ Attendance Marked! Welcome {person}!")
-                            else:
-                                st.info(f"{person} already marked today!")
-                        else:
-                            pd.DataFrame(data).to_csv(ATTENDANCE_FILE,index=False)
-                            st.success(f"✅ Attendance Marked! {person}!")
-                    else:
-                        st.error("❌ Face Not Registered!")
-
-with tab3:
-    st.header("Attendance Records")
-    if os.path.exists(ATTENDANCE_FILE):
-        df=pd.read_csv(ATTENDANCE_FILE)
-        st.dataframe(df, use_container_width=True)
-        st.download_button("📥 Download CSV", df.to_csv(index=False).encode('utf-8'), "attendance.csv", "text/csv")
-    else:
-        st.info("No attendance yet!")
+                                st.success(f
