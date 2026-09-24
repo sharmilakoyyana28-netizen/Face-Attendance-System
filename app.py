@@ -25,7 +25,7 @@ if img_file is not None:
         st.error("Could not read image!")
     else:
         gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, 1.1, 6, minSize=(80,80))
+        faces = face_cascade.detectMultiScale(gray, 1.1, 6, minSize=(120,120))
         
         if len(faces) == 0:
             st.warning("No face detected!")
