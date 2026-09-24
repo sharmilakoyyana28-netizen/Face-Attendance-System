@@ -40,22 +40,26 @@ if menu == "Mark Attendance":
     st.header("📸 Mark Your Attendance")
     st.write("Click photo - it will detect and mark attendance")
     
-    img_file = st.camera_input("Take a photo")
+   img_file = st.camera_input("Take a photo")
+
+face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+if img_file is not None:
+    bytes_data = img_file.getvalue()
+    cv_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
     
-    if img_file is not None:
-        # Convert to cv2
-        bytes_data = img_file.getvalue()
-        cv_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+    if cv_img is None:
+        st.error("Failed to read image, try again!")
+    else:
         gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-        
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
         faces = face_cascade.detectMultiScale(gray, 1.3, 5)
-        
+
         if len(faces) == 0:
-            st.warning("No face detected! Try again with better light babe!")
+            st.warning("No face detected! Try again with better light!")
         else:
             for (x,y,w,h) in faces:
                 cv2.rectangle(cv_img, (x,y), (x+w, y+h), (0,255,0), 2)
+            st.image(cv_img, channels="BGR")
                 if recognizer:
                     id_pred, conf = recognizer.predict(gray[y:y+h, x:x+w])
                     # Lower confidence is better in LBPH
