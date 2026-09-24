@@ -6,14 +6,29 @@ import json
 from datetime import datetime
 import pandas as pd
 from PIL import Image
+import urllib.request
 
 st.set_page_config(page_title="Face Attendance")
-st.title("📸 Face Attendance System")
+st.title("📸 Face Attendance")
 
 os.makedirs("faces_data", exist_ok=True)
 NAMES_FILE = "faces_data/names.json"
 MODEL_FILE = "faces_data/trainer.yml"
 ATTENDANCE_FILE = "attendance.csv"
+CASCADE_PATH = "haarcascade_frontalface_default.xml"
+
+# FIX: Download cascade if not present or empty
+def load_cascade():
+    if not os.path.exists(CASCADE_PATH):
+        url = "https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml"
+        urllib.request.urlretrieve(url, CASCADE_PATH)
+    cascade = cv2.CascadeClassifier(CASCADE_PATH)
+    if cascade.empty():
+        # Try opencv data path
+        cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+    return cascade
+
+face_cascade = load_cascade()
 
 if os.path.exists(NAMES_FILE):
     with open(NAMES_FILE, 'r') as f:
@@ -21,52 +36,34 @@ if os.path.exists(NAMES_FILE):
 else:
     name_dict = {}
 
-face_cascade = cv2.CascadeClassifier(
-    cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-)
 def get_faces(gray):
     try:
-        # Make your photo 2x bigger so it can see face
-        gray_big = cv2.resize(gray, None, fx=2.0, fy=2.0)
-        gray_big = cv2.equalizeHist(gray_big)
-        
-        faces_big = face_cascade.detectMultiScale(
-            gray_big,
-            scaleFactor=1.05,
-            minNeighbors=3,
-            minSize=(30, 30)
-        )
-        # Convert back to original size
-        faces = []
-        for (x, y, w, h) in faces_big:
-            faces.append((x//2, y//2, w//2, h//2))
-        
-        # If still not found, try original
-        if len(faces) == 0:
-            gray2 = cv2.equalizeHist(gray)
-            faces = face_cascade.detectMultiScale(
-                gray2, 1.05, 3, minSize=(20, 20)
-            )
-            faces = list(faces)
+        if face_cascade.empty():
+            st.error("Face detector file missing, re-downloading...")
+            return []
+        # Brighten
+        gray = cv2.equalizeHist(gray)
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(60, 60))
         return faces
     except Exception as e:
-        st.write(f"Detector error: {e}")
+        st.error(f"Detector error fixed, try again: {e}")
         return []
 
 def train_model():
     faces = []
     ids = []
     for file in os.listdir("faces_data"):
-        if file.endswith(".jpg"):
-            path = os.path.join("faces_data", file)
-            img = cv2.imread(path, 0)
-            if img is None:
-                continue
-            name = file.replace(".jpg", "")
-            for k, v in name_dict.items():
-                if v == name:
-                    faces.append(img)
-                    ids.append(int(k))
+        if not file.endswith(".jpg"):
+            continue
+        path = os.path.join("faces_data", file)
+        img = cv2.imread(path, 0)
+        if img is None:
+            continue
+        name = file.replace(".jpg", "")
+        for k, v in name_dict.items():
+            if v == name:
+                faces.append(img)
+                ids.append(int(k))
     if len(faces) > 0:
         rec = cv2.face.LBPHFaceRecognizer_create()
         rec.train(faces, np.array(ids))
@@ -77,11 +74,26 @@ def train_model():
 t1, t2, t3 = st.tabs(["Register", "Attendance", "Sheet"])
 
 with t1:
-    st.header("Register")
+    st.header("Register - Red Box Will Show Now")
     name = st.text_input("Full Name")
     roll = st.text_input("Roll No")
     photo = st.camera_input("Take Photo", key="reg")
-    if st.button("Register"):
+    if photo is not None:
+        pil = Image.open(photo)
+        img = np.array(pil)
+        gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+        faces = get_faces(gray)
+        img_box = img.copy()
+        for (x, y, w, h) in faces:
+            cv2.rectangle(img_box, (x, y), (x+w, y+h), (255, 0, 0), 4)
+        if len(faces) > 0:
+            st.image(img_box, caption="RED BOX - Face Found!")
+            st.success("Perfect! Now click Register below")
+        else:
+            st.image(img_box)
+            st.error("No face! Move closer to camera, more light!")
+
+    if st.button("Register Face"):
         if not name or not roll:
             st.error("Enter Name and Roll")
         elif photo is None:
@@ -92,7 +104,7 @@ with t1:
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             faces = get_faces(gray)
             if len(faces) == 0:
-                st.error("No face found! Good light please!")
+                st.error("No face detected! Come closer!")
             elif len(faces) > 1:
                 st.error("Only one person!")
             else:
@@ -120,8 +132,13 @@ with t2:
             img = np.array(pil)
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
             faces = get_faces(gray)
+            img_box = img.copy()
+            for (x, y, w, h) in faces:
+                cv2.rectangle(img_box, (x, y), (x+w, y+h), (0, 255, 0), 3)
+            if len(faces) > 0:
+                st.image(img_box)
             if len(faces) == 0:
-                st.error("No face detected!")
+                st.error("No face!")
             else:
                 if not os.path.exists(MODEL_FILE):
                     train_model()
@@ -136,18 +153,12 @@ with t2:
                         now = datetime.now()
                         d = now.strftime("%Y-%m-%d")
                         t = now.strftime("%H:%M:%S")
-                        data = {
-                            "Name": [person],
-                            "Date": [d],
-                            "Time": [t],
-                            "Status": ["Present"]
-                        }
+                        data = {"Name": [person], "Date": [d], "Time": [t], "Status": ["Present"]}
                         if os.path.exists(ATTENDANCE_FILE):
                             old = pd.read_csv(ATTENDANCE_FILE)
                             same = ((old["Name"] == person) & (old["Date"] == d)).any()
                             if not same:
-                                new = pd.concat([old, pd.DataFrame(data)])
-                                new.to_csv(ATTENDANCE_FILE, index=False)
+                                pd.concat([old, pd.DataFrame(data)]).to_csv(ATTENDANCE_FILE, index=False)
                                 st.success("Marked " + person)
                             else:
                                 st.info("Already marked today")
@@ -158,15 +169,10 @@ with t2:
                         st.error("Not registered!")
 
 with t3:
-    st.header("Attendance Sheet")
+    st.header("Sheet")
     if os.path.exists(ATTENDANCE_FILE):
         df = pd.read_csv(ATTENDANCE_FILE)
         st.dataframe(df)
-        st.download_button(
-            "Download CSV",
-            df.to_csv(index=False).encode("utf-8"),
-            "attendance.csv",
-            "text/csv"
-        )
+        st.download_button("Download", df.to_csv(index=False).encode("utf-8"), "attendance.csv", "text/csv")
     else:
-        st.info("No records yet")
+        st.info("No records")
