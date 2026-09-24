@@ -24,17 +24,33 @@ else:
 face_cascade = cv2.CascadeClassifier(
     cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
 )
-
 def get_faces(gray):
-    if gray is None:
-        return []
     try:
+        # Make image brighter and more clear
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8))
+        gray = clahe.apply(gray)
+        gray = cv2.equalizeHist(gray)
+        
+        # Try super sensitive detection
         faces = face_cascade.detectMultiScale(
-            gray, 1.1, 5, minSize=(60, 60)
+            gray, 
+            scaleFactor=1.05,
+            minNeighbors=3,
+            minSize=(20, 20),
+            flags=cv2.CASCADE_SCALE_IMAGE
         )
+        # If still not found, try even more sensitive
+        if len(faces) == 0:
+            faces = face_cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.03,
+                minNeighbors=2,
+                minSize=(15, 15)
+            )
         return faces
     except:
         return []
+
 
 def train_model():
     faces = []
