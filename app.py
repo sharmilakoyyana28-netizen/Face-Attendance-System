@@ -7,8 +7,8 @@ from datetime import datetime
 import pandas as pd
 from PIL import Image
 
-st.set_page_config(page_title="Face Attendance System", layout="centered")
-st.title("📸 Smart Face Attendance System")
+st.set_page_config(page_title="Face Attendance")
+st.title("📸 Face Attendance")
 
 os.makedirs("faces_data", exist_ok=True)
 NAMES_FILE = "faces_data/names.json"
@@ -21,105 +21,162 @@ if os.path.exists(NAMES_FILE):
 else:
     name_dict = {}
 
-face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades +
+    'haarcascade_frontalface_default.xml'
+)
 
 def detect_faces(img):
     try:
         if img is None:
             return [], None
-        # Convert PIL RGB to OpenCV BGR -> GRAY (100% safe)
         if len(img.shape) == 3:
             gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
         else:
             gray = img
         if gray is None or gray.size == 0:
             return [], None
-        # Ensure gray is uint8
-        if gray.dtype!= np.uint8:
-            gray = gray.astype(np.uint8)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(60, 60))
+        faces = face_cascade.detectMultiScale(
+            gray, 1.1, 5, minSize=(60, 60)
+        )
         return faces, gray
-    except Exception as e:
-        st.write(f"Debug: {e}")
+    except:
         return [], None
 
 def train_model():
-    faces=[]; ids=[]
+    faces = []
+    ids = []
     for file in os.listdir("faces_data"):
-        if file.endswith(".jpg"):
-            path=os.path.join("faces_data", file)
-            img=cv2.imread(path, 0)
-            if img is None: continue
-            for nid, nname in name_dict.items():
-                if nname == file.replace(".jpg",""):
-                    faces.append(img); ids.append(int(nid)); break
-    if len(faces)>0:
-        recognizer=cv2.face.LBPHFaceRecognizer_create()
-        recognizer.train(faces, np.array(ids))
-        recognizer.save(MODEL_FILE)
+        if not file.endswith(".jpg"):
+            continue
+        path = os.path.join("faces_data", file)
+        img = cv2.imread(path, 0)
+        if img is None:
+            continue
+        for nid, nname in name_dict.items():
+            if nname == file.replace(".jpg", ""):
+                faces.append(img)
+                ids.append(int(nid))
+    if len(faces) > 0:
+        rec = cv2.face.LBPHFaceRecognizer_create()
+        rec.train(faces, np.array(ids))
+        rec.save(MODEL_FILE)
         return True
     return False
 
-tab1, tab2, tab3 = st.tabs(["📝 Register", "✅ Attendance", "📊 Sheet"])
+tab1, tab2, tab3 = st.tabs(
+    ["Register", "Attendance", "Sheet"]
+)
 
 with tab1:
-    st.header("Register New Face")
-    reg_name=st.text_input("Enter Full Name")
-    reg_roll=st.text_input("Enter Roll No / ID")
-    reg_image=st.camera_input("Take photo for Registration", key="reg")
+    st.header("Register Face")
+    reg_name = st.text_input("Name")
+    reg_roll = st.text_input("Roll No")
+    reg_image = st.camera_input("Photo", key="reg")
     if st.button("Register Face"):
         if not reg_name or not reg_roll:
-            st.error("Please enter Name and Roll No!")
+            st.error("Enter Name and Roll!")
         elif reg_image is None:
-            st.error("Please take a photo first!")
+            st.error("Take Photo!")
         else:
-            # BEST METHOD: PIL -> numpy (never fails)
             pil_img = Image.open(reg_image)
             img = np.array(pil_img)
             faces, gray = detect_faces(img)
-            if len(faces)==0:
-                st.error("No face found! Come closer, good light, look straight!")
-                st.image(img, caption="This is what camera saw")
-            elif len(faces)>1:
-                st.error(f"Found {len(faces)} faces! Register alone!")
+            if len(faces) == 0:
+                st.error("No face! Come closer!")
+            elif len(faces) > 1:
+                st.error("Only 1 face!")
             else:
-                x,y,w,h=faces[0]
-                face_roi=gray[y:y+h, x:x+w]
-                face_roi=cv2.resize(face_roi, (200,200))
-                full_name=f"{reg_name}_{reg_roll}"
-                cv2.imwrite(f"faces_data/{full_name}.jpg", face_roi)
-                new_id=len(name_dict)
-                name_dict[str(new_id)]=full_name
-                with open(NAMES_FILE,'w') as f: json.dump(name_dict,f)
+                x, y, w, h = faces[0]
+                roi = gray[y:y+h, x:x+w]
+                roi = cv2.resize(roi, (200, 200))
+                full_name = reg_name + "_" + reg_roll
+                cv2.imwrite(
+                    "faces_data/" + full_name + ".jpg",
+                    roi
+                )
+                new_id = len(name_dict)
+                name_dict[str(new_id)] = full_name
+                with open(NAMES_FILE, 'w') as f:
+                    json.dump(name_dict, f)
                 train_model()
-                st.success(f"✅ Registered! Welcome {reg_name}!")
+                st.success("Registered! " + reg_name)
                 st.balloons()
 
 with tab2:
-    st.header("Mark Attendance")
-    if len(name_dict)==0:
-        st.warning("No faces yet! Register first!")
+    st.header("Take Attendance")
+    if len(name_dict) == 0:
+        st.warning("Register first!")
     else:
-        att_image=st.camera_input("Take photo for Attendance", key="att")
+        att_image = st.camera_input(
+            "Photo", key="att"
+        )
         if att_image:
             pil_img = Image.open(att_image)
             img = np.array(pil_img)
             faces, gray = detect_faces(img)
-            if len(faces)==0:
-                st.error("No face detected!")
+            if len(faces) == 0:
+                st.error("No face!")
             else:
-                if not os.path.exists(MODEL_FILE): train_model()
-                recognizer=cv2.face.LBPHFaceRecognizer_create()
-                recognizer.read(MODEL_FILE)
-                for (x,y,w,h) in faces:
-                    roi=cv2.resize(gray[y:y+h, x:x+w], (200,200))
-                    id_, conf = recognizer.predict(roi)
+                if not os.path.exists(MODEL_FILE):
+                    train_model()
+                rec = cv2.face.LBPHFaceRecognizer_create()
+                rec.read(MODEL_FILE)
+                for (x, y, w, h) in faces:
+                    roi = gray[y:y+h, x:x+w]
+                    roi = cv2.resize(roi, (200, 200))
+                    id_, conf = rec.predict(roi)
                     if conf < 70:
-                        person=name_dict.get(str(id_),"Unknown")
-                        now=datetime.now()
-                        data={"Name":[person],"Date":[now.strftime("%Y-%m-%d")],"Time":[now.strftime("%H:%M:%S")],"Status":["Present"]}
+                        person = name_dict.get(
+                            str(id_), "Unknown"
+                        )
+                        now = datetime.now()
+                        d = now.strftime("%Y-%m-%d")
+                        t = now.strftime("%H:%M:%S")
+                        data = {
+                            "Name": [person],
+                            "Date": [d],
+                            "Time": [t],
+                            "Status": ["Present"]
+                        }
                         if os.path.exists(ATTENDANCE_FILE):
-                            df_old=pd.read_csv(ATTENDANCE_FILE)
-                            if not ((df_old['Name']==person) & (df_old['Date']==now.strftime("%Y-%m-%d"))).any():
-                                pd.concat([df_old, pd.DataFrame(data)]).to_csv(ATTENDANCE_FILE,index=False)
-                                st.success(f
+                            df_old = pd.read_csv(
+                                ATTENDANCE_FILE
+                            )
+                            check = (
+                                (df_old['Name'] == person) &
+                                (df_old['Date'] == d)
+                            ).any()
+                            if not check:
+                                df_new = pd.concat(
+                                    [df_old, pd.DataFrame(data)]
+                                )
+                                df_new.to_csv(
+                                    ATTENDANCE_FILE,
+                                    index=False
+                                )
+                                st.success("Marked! " + person)
+                            else:
+                                st.info("Already marked!")
+                        else:
+                            pd.DataFrame(data).to_csv(
+                                ATTENDANCE_FILE,
+                                index=False
+                            )
+                            st.success("Marked! " + person)
+                    else:
+                        st.error("Not Registered!")
+
+with tab3:
+    st.header("Sheet")
+    if os.path.exists(ATTENDANCE_FILE):
+        df = pd.read_csv(ATTENDANCE_FILE)
+        st.dataframe(df)
+        st.download_button(
+            "Download CSV",
+            df.to_csv(index=False).encode('utf-8'),
+            "attendance.csv",
+            "text/csv"
+        )
+    else:
+        st.info("No data yet!")
