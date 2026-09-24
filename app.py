@@ -120,4 +120,4 @@ with tab1:
             st.error("Take Photo first!")
         else:
             pil_img = Image.open(reg_image)
-            img = np.array(pil_img
+            img = np.array(pil_img)
