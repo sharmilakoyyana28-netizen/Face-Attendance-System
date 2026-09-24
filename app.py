@@ -41,7 +41,7 @@ with tab1:
         
         img_file = st.camera_input("Take Photo")
         
-       img_file = st.camera_input("Take Photo")
+        img_file = st.camera_input("Take Photo")
         
         if img_file is not None:
             bytes_data = img_file.getvalue()
