@@ -94,4 +94,4 @@ if menu == "Mark Attendance":
 elif menu == "View Attendance":
     st.header("📋 Attendance Sheet")
     if os.path.exists("Attendance.csv"):
-        df = pd.read_csv("Attendance.csv
+        df = pd.read_csv("Attendance.csv")
