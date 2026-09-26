@@ -1,34 +1,67 @@
 import streamlit as st
-import face_recognition
+import cv2
 import numpy as np
 import os
-import pickle
-from datetime import datetime
 import pandas as pd
+from datetime import datetime
+from PIL import Image
 
 st.set_page_config(page_title="Face Attendance System", layout="centered")
 st.title("📸 Face Attendance System")
 
 # Files
-ENCODINGS_FILE = "encodings.pkl"
 ATTENDANCE_FILE = "attendance.csv"
-
-# Load data
-if os.path.exists(ENCODINGS_FILE):
-    with open(ENCODINGS_FILE, 'rb') as f:
-        known_encodings, known_names = pickle.load(f)
-else:
-    known_encodings, known_names = [], []
+FACES_DIR = "registered_faces"
+os.makedirs(FACES_DIR, exist_ok=True)
 
 # --- Register Section ---
 st.header("1. Register Student")
 reg_name = st.text_input("Enter Student Name")
 reg_image = st.file_uploader("Upload Student Photo", type=["jpg", "jpeg", "png"])
+cam_reg = st.camera_input("Or Take Photo for Registration")
 
 if st.button("Register"):
-    if reg_name and reg_image:
-        image = face_recognition.load_image_file(reg_image)
-        encodings = face_recognition.face_encodings(image)
-        if len(encodings) > 0:
-            known_encodings.append(encodings[0])
-            known_names.append(reg)
+    img_to_save = None
+    if reg_image:
+        img_to_save = Image.open(reg_image)
+    elif cam_reg:
+        img_to_save = Image.open(cam_reg)
+    
+    if reg_name and img_to_save:
+        save_path = os.path.join(FACES_DIR, f"{reg_name}.jpg")
+        img_to_save.save(save_path)
+        st.success(f"{reg_name} Registered Successfully! ✅")
+    else:
+        st.warning("Please enter name and give photo")
+
+st.divider()
+
+# --- Attendance Section ---
+st.header("2. Mark Attendance")
+st.write("Take photo and select your name (Face Detection enabled)")
+attendance_name = st.selectbox("Select Your Name", options=os.listdir(FACES_DIR) if os.listdir(FACES_DIR) else ["No Registered Users"])
+cam_att = st.camera_input("Take photo for attendance")
+
+if cam_att:
+    if attendance_name != "No Registered Users":
+        # Face detection check with OpenCV (error free)
+        image = Image.open(cam_att)
+        img_array = np.array(image)
+        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
+        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+
+        if len(faces) > 0:
+            now = datetime.now()
+            date_str = now.strftime("%Y-%m-%d")
+            time_str = now.strftime("%H:%M:%S")
+            name_clean = attendance_name.replace('.jpg','')
+
+            if not os.path.exists(ATTENDANCE_FILE):
+                df = pd.DataFrame(columns=["Name", "Date", "Time"])
+                df.to_csv(ATTENDANCE_FILE, index=False)
+            
+            df = pd.read_csv(ATTENDANCE_FILE)
+            if not ((df['Name'] == name_clean) & (df['Date'] == date_str)).any():
+                new_row = pd.DataFrame([[name_clean, date_str, time_str]], columns=["Name", "Date", "Time"])
+                df = pd.concat([df, new_row], ignore_index=True
