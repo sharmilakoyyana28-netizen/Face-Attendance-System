@@ -1,6 +1,4 @@
 import streamlit as st
-import cv2
-import numpy as np
 import os
 import pandas as pd
 from datetime import datetime
@@ -39,42 +37,41 @@ files = os.listdir(FACES_DIR)
 attendance_name = st.selectbox("Select Your Name", files if files else ["No Registered Users"])
 cam_att = st.camera_input("Take photo for attendance")
 
-if cam_att:
-    if attendance_name != "No Registered Users":
-        image = Image.open(cam_att)
-        img_array = np.array(image)
-        gray = cv2.cvtColor(img_array, cv2.COLOR_RGB2GRAY)
-        face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-        faces = face_cascade.detectMultiScale(gray, 1.1, 4)
+if st.button("Mark Attendance"):
+    if attendance_name != "No Registered Users" and cam_att:
+        now = datetime.now()
+        date_str = now.strftime("%Y-%m-%d")
+        time_str = now.strftime("%H:%M:%S")
+        name_clean = attendance_name.replace(".jpg","")
 
-        if len(faces) > 0:
-            now = datetime.now()
-            date_str = now.strftime("%Y-%m-%d")
-            time_str = now.strftime("%H:%M:%S")
-            name_clean = attendance_name.replace(".jpg","")
-
-            if not os.path.exists(ATTENDANCE_FILE):
-                df = pd.DataFrame(columns=["Name", "Date", "Time"])
-                df.to_csv(ATTENDANCE_FILE, index=False)
-            
-            df = pd.read_csv(ATTENDANCE_FILE)
+        if not os.path.exists(ATTENDANCE_FILE):
+            df = pd.DataFrame(columns=["Name", "Date", "Time"])
+            df.to_csv(ATTENDANCE_FILE, index=False)
+        
+        df = pd.read_csv(ATTENDANCE_FILE)
+        already = False
+        if len(df) > 0:
             already = ((df['Name'] == name_clean) & (df['Date'] == date_str)).any()
-            
-            if not already:
-                df.loc[len(df)] = [name_clean, date_str, time_str]
-                df.to_csv(ATTENDANCE_FILE, index=False)
-                st.success("Attendance Marked for " + name_clean + " at " + time_str)
-                st.balloons()
-            else:
-                st.warning(name_clean + " - Already marked today!")
+        
+        if not already:
+            df.loc[len(df)] = [name_clean, date_str, time_str]
+            df.to_csv(ATTENDANCE_FILE, index=False)
+            st.success("Attendance Marked for " + name_clean + " at " + time_str)
+            st.balloons()
         else:
-            st.error("No face detected! Retake photo.")
+            st.warning(name_clean + " - Already marked today!")
     else:
-        st.error("No registered users!")
+        st.error("Select name and take photo!")
 
 st.divider()
 
 st.header("3. Attendance Sheet")
 if os.path.exists(ATTENDANCE_FILE):
     df = pd.read_csv(ATTENDANCE_FILE)
-    st.dataframe
+    st.dataframe(df, use_container_width=True)
+else:
+    st.info("No records yet")
+
+registered = [f.replace('.jpg','') for f in os.listdir(FACES_DIR)]
+st.write("Total Registered: " + str(len(registered)))
+st.write(registered)
